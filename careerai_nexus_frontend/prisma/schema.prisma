@@ -63,3 +63,43 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// ========== Additional Models for Dashboard Stats & Analytics ==========
+
+model Interview {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  scheduledAt DateTime?    // When the interview happened or is scheduled
+  score      Float?        // AI-assigned score/percent (0-100)
+  transcript Json?         // Embedded array of Q&A and feedback
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Resume {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  title       String?  // Resume label/title
+  docUrl      String?  // Storage location (optional)
+  submissionCount Int   @default(0)    // Count of submissions using this resume
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Insight {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  weekStart  DateTime // Insights are grouped per week (ISO)
+  summary    String   // AI-generated insight summary
+  chartData  Json?    // Stored data points for charting (e.g. scores)
+  createdAt  DateTime @default(now())
+}
+
+// Add relations for aggregation purposes (optional for Prisma)
+// In User:
+//   interviews Interview[]
+//   resumes Resume[]
+//   insights Insight[]
