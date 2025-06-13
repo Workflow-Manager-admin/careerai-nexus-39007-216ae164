@@ -3,11 +3,23 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  --cyber-white: #ffffff;
+  --cyber-pitch-black: #0a0a0a;
+  --cyber-cyan: #15f6ff;
+  --cyber-pink: #e21f70;
+  --cyber-accent-bg: #f9f7ff;
+  --cyber-accent-dark: #1ef2e2;
 }
 
+/* Set theme vars for utility usage */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-cyan: var(--cyber-cyan);
+  --color-pink: var(--cyber-pink);
+  --color-pitch-black: var(--cyber-pitch-black);
+  --color-white: var(--cyber-white);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -19,8 +31,9 @@
   }
 }
 
+/* Cyber theme base body */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
