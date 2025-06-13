@@ -6,15 +6,15 @@ import { compare, hash } from "bcryptjs";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 
-// -----------------------------
-// ENV/Secret references
-// -----------------------------
+// ------------------------------------------------
+// ENV/Secret references (for secure, production setup)
+// ------------------------------------------------
 const isProd = process.env.NODE_ENV === "production";
 const {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   NEXTAUTH_SECRET,
-  NEXTAUTH_URL,
+  NEXTAUTH_URL, // referenced in some NextAuth flows (email verification/redirect), not currently used, but available
 } = process.env;
 
 if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !NEXTAUTH_SECRET) {
@@ -23,27 +23,11 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !NEXTAUTH_SECRET) {
   );
 }
 
-// -----------------------------
-// Prisma singleton (handles hot reload)
-// -----------------------------
-/**
- * PUBLIC_INTERFACE
- * Get Prisma client instance (imported from @/lib/prisma)
- */
- 
-// If not already defined in lib/prisma.ts
-// import { PrismaClient } from "@prisma/client";
-// let prisma = globalThis.prisma || new PrismaClient();
-// if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
+// ------------------------------------------------
+// NextAuth.js configuration for CareerAI Nexus custom auth
+// ------------------------------------------------
 
-// -----------------------------
-// Auth Options
-// -----------------------------
-
-/**
- * PUBLIC_INTERFACE
- * NextAuth.js configuration for CareerAI Nexus custom auth.
- */
+// PUBLIC_INTERFACE
 export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -51,9 +35,9 @@ export const authOptions: AuthOptions = {
     GoogleProvider({
       clientId: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: false, // Prevent account collision
+      allowDangerousEmailAccountLinking: false, // Prevent account collision via email
     }),
-    // Credentials Provider (email/password)
+    // Credentials Provider (email/password, robust register+login)
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -62,9 +46,8 @@ export const authOptions: AuthOptions = {
         register: { label: "Register", type: "text" }, // Hidden param for registration
       },
       // PUBLIC_INTERFACE
-      // Credentials authorization (sign-in & sign-up)
       async authorize(credentials, req) {
-        // Validate schema
+        // Validate & parse credentials
         const credsSchema = z.object({
           email: z.string().email(),
           password: z.string().min(6, "Password must be at least 6 characters"),
@@ -72,14 +55,11 @@ export const authOptions: AuthOptions = {
         });
         const { email, password, register } = credsSchema.parse(credentials);
 
-        // If register === "true", handle sign-up logic
+        // Handle Sign-up
         if (register === "true") {
-          // Check for existing user
           const existingUser = await prisma.user.findUnique({ where: { email } });
-          if (existingUser) {
-            throw new Error("Email already registered.");
-          }
-          // Create user (hash password)
+          if (existingUser) throw new Error("Email already registered.");
+          // Hash password securely
           const hashed = await hash(password, 10);
           const user = await prisma.user.create({
             data: {
@@ -95,16 +75,15 @@ export const authOptions: AuthOptions = {
             image: user.image,
           };
         }
-        // Normal credentials sign-in
+        // Handle Sign-in
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.password || user.provider !== "credentials") {
           throw new Error("CredentialsSignin");
         }
-        // Compare provided password with stored hash
         const isValid = await compare(password, user.password);
         if (!isValid) throw new Error("CredentialsSignin");
 
-        // Optionally: update login stats
+        // Optionally update login stats
         await prisma.user.update({
           where: { id: user.id },
           data: {
@@ -122,15 +101,18 @@ export const authOptions: AuthOptions = {
       },
     }),
   ],
+  // Production-ready, stateless JWT sessions
   session: {
-    strategy: "jwt" as SessionStrategy, // stateless, secure for serverless/next deployment
+    strategy: "jwt" as SessionStrategy,
     maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60, // 1 day
+    updateAge: 24 * 60 * 60, // 1 day, token will be refreshed after this period
   },
+  // JWT configuration: strongest secret and rotation control
   jwt: {
     secret: NEXTAUTH_SECRET,
     maxAge: 30 * 24 * 60 * 60,
   },
+  // Secure, production-grade cookie config
   cookies: {
     sessionToken: {
       name: isProd
@@ -141,7 +123,9 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: isProd,
-        domain: undefined, // Set to your production domain if required
+        // For secure deployment, set "domain" to your real domain (e.g. "yourapp.com") if running behind a custom domain
+        // domain: isProd ? "your-domain.com" : undefined,
+        domain: undefined,
       },
     },
   },
@@ -150,21 +134,22 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/signin",
     signOut: "/signin",
-    error: "/signin", // Handles sign-in error display/redirects
+    error: "/signin", // Auth errors shown on signin page
     verifyRequest: "/signin",
-    newUser: "/onboarding", // You may want to handle onboarding
+    newUser: "/onboarding", // Potential onboarding target page
   },
+  // CALLBACKS for custom session and JWT shaping & integration with Prisma user/account
   callbacks: {
     // PUBLIC_INTERFACE
     async session({ session, token, user }) {
-      // Augment session with user id, role if available
+      // Attach user id and role from JWT to the session object for frontend use
       if (token?.sub) session.user.id = token.sub;
       if (token?.role) session.user.role = token.role;
       return session;
     },
     // PUBLIC_INTERFACE
     async jwt({ token, user, account, profile }) {
-      // Attach user info & roles to JWT token
+      // On login, attach extra user info/role to token (for role-based access)
       if (user) {
         token.id = user.id;
         token.email = user.email;
@@ -174,17 +159,14 @@ export const authOptions: AuthOptions = {
     },
     // PUBLIC_INTERFACE
     async signIn({ user, account, profile, email, credentials }) {
-      // You can add domain allow/block logic here
+      // If you want domain allow/block or post sign-in logic, do here. For now, allow all verified users.
       return true;
     },
   },
-  adapter: PrismaAdapter(prisma),
 };
 
-/**
- * PUBLIC_INTERFACE
- * NextAuth route handler for Next.js app directory (API route)
- */
+// PUBLIC_INTERFACE
+// NextAuth route handler for Next.js app directory (API route)
 const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
