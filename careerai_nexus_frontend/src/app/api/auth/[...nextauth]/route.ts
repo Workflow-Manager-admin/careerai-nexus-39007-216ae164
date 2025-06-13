@@ -7,6 +7,107 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import type { JWT } from "next-auth/jwt";
 
+// Helper: Merge OAuth/Credentials user profile to ensure upsert/linked info
+async function upsertUserAndAccount({ user, account, profile }) {
+  if (!account || !account.provider || !account.providerAccountId) return user;
+
+  // Find the user by providerAccountId or by email
+  let dbUser = await prisma.user.findUnique({
+    where: { email: user.email ?? undefined },
+    include: { accounts: true },
+  });
+
+  // Upsert User (create new for OAuth if needed, update profile on login)
+  // OAuth: always update minimal profile fields; allow hook for profile enrichment later
+  if (!dbUser && account.provider !== "credentials") {
+    dbUser = await prisma.user.create({
+      data: {
+        email: user.email,
+        name: user.name ?? profile?.name ?? undefined,
+        image: user.image ?? profile?.picture ?? profile?.image ?? undefined,
+        provider: account.provider,
+        profile: profile ? profile : undefined,
+        emailVerified:
+          account.provider === "google" && profile?.email_verified
+            ? new Date()
+            : undefined,
+        accounts: {
+          create: {
+            provider: account.provider,
+            providerAccountId: account.providerAccountId,
+            type: account.type,
+            access_token: account.access_token,
+            refresh_token: account.refresh_token,
+            expires_at: account.expires_at,
+            id_token: account.id_token,
+            token_type: account.token_type,
+            scope: account.scope,
+            session_state: account.session_state,
+          },
+        },
+      },
+    });
+  } else if (dbUser) {
+    // Update profile fields/last login, upsert account if new provider, update tokens if needed
+    await prisma.user.update({
+      where: { id: dbUser.id },
+      data: {
+        name: user.name ?? dbUser.name,
+        image: user.image ?? dbUser.image,
+        provider: account.provider ?? dbUser.provider,
+        profile: profile
+          ? { ...dbUser.profile, ...profile }
+          : dbUser.profile,
+        lastLogin: new Date(),
+        loginCount: { increment: 1 },
+        accounts: {
+          upsert: {
+            where: {
+              provider_providerAccountId: {
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+              },
+            },
+            update: {
+              access_token: account.access_token,
+              refresh_token: account.refresh_token,
+              expires_at: account.expires_at,
+              id_token: account.id_token,
+              token_type: account.token_type,
+              scope: account.scope,
+              session_state: account.session_state,
+            },
+            create: {
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              type: account.type,
+              access_token: account.access_token,
+              refresh_token: account.refresh_token,
+              expires_at: account.expires_at,
+              id_token: account.id_token,
+              token_type: account.token_type,
+              scope: account.scope,
+              session_state: account.session_state,
+            },
+          },
+        },
+      },
+    });
+  }
+  // Find (again) and return latest
+  const result = await prisma.user.findUnique({
+    where: { email: user.email ?? undefined },
+  });
+  return (
+    result || {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      image: user.image,
+    }
+  ); // fallback for credentials only
+}
+
 // ------------------------------------------------
 // ENV/Secret references (for secure, production setup)
 // ------------------------------------------------
@@ -38,30 +139,30 @@ type AppUser = {
 type AppSessionUser = Session["user"] & { id: string; role?: string | null };
 
 // ------------------------------------------------
-// NextAuth.js configuration for CareerAI Nexus custom auth
-// ------------------------------------------------
-
-// PUBLIC_INTERFACE
+/*
+ * PUBLIC_INTERFACE
+ * Updated NextAuth configuration to ensure robust user/account upsert on login for all providers,
+ * extensible for future OAuth, rich profile support, and provider mapping.
+ */
 export const authOptions: AuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma), // Remains for compatibility, but callback upserts override/extend
   providers: [
     // Google OAuth Provider
     GoogleProvider({
       clientId: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: false, // Prevent account collision via email
+      allowDangerousEmailAccountLinking: false,
     }),
-    // Credentials Provider (email/password, robust register+login)
+    // Credentials Provider (email/password)
     CredentialsProvider({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email", required: true },
         password: { label: "Password", type: "password", required: true },
-        register: { label: "Register", type: "text" }, // Hidden param for registration
+        register: { label: "Register", type: "text" },
       },
       // PUBLIC_INTERFACE
       async authorize(credentials: Record<string, unknown> | undefined, req) {
-        // Validate & parse credentials
         const credsSchema = z.object({
           email: z.string().email(),
           password: z.string().min(6, "Password must be at least 6 characters"),
@@ -74,18 +175,17 @@ export const authOptions: AuthOptions = {
           throw new Error("Invalid credentials format");
         }
         const { email, password, register } = parsed;
-
-        // Handle Sign-up
         if (register === "true") {
+          // Registration: Create user if not exists
           const existingUser = await prisma.user.findUnique({ where: { email } });
           if (existingUser) throw new Error("Email already registered.");
-          // Hash password securely
           const hashed = await hash(password, 10);
           const user = await prisma.user.create({
             data: {
               email,
               password: hashed,
               provider: "credentials",
+              // future extensible profile fields can be set via onboarding after
             },
           });
           return {
@@ -96,14 +196,13 @@ export const authOptions: AuthOptions = {
             role: user.role,
           } as AppUser;
         }
-        // Handle Sign-in
+        // Sign-in
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.password || user.provider !== "credentials") {
           throw new Error("CredentialsSignin");
         }
         const isValid = await compare(password, user.password);
         if (!isValid) throw new Error("CredentialsSignin");
-
         // Optionally update login stats
         await prisma.user.update({
           where: { id: user.id },
@@ -123,18 +222,15 @@ export const authOptions: AuthOptions = {
       },
     }),
   ],
-  // Production-ready, stateless JWT sessions
   session: {
     strategy: "jwt" as SessionStrategy,
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60, // 1 day, token will be refreshed after this period
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
   },
-  // JWT configuration: strongest secret and rotation control
   jwt: {
     secret: NEXTAUTH_SECRET,
     maxAge: 30 * 24 * 60 * 60,
   },
-  // Secure, production-grade cookie config
   cookies: {
     sessionToken: {
       name: isProd
@@ -145,8 +241,6 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: isProd,
-        // For secure deployment, set "domain" to your real domain (e.g. "yourapp.com") if running behind a custom domain
-        // domain: isProd ? "your-domain.com" : undefined,
         domain: undefined,
       },
     },
@@ -156,16 +250,13 @@ export const authOptions: AuthOptions = {
   pages: {
     signIn: "/signin",
     signOut: "/signin",
-    error: "/signin", // Auth errors shown on signin page
+    error: "/signin",
     verifyRequest: "/signin",
-    newUser: "/onboarding", // Potential onboarding target page
+    newUser: "/onboarding",
   },
-  // CALLBACKS for custom session and JWT shaping & integration with Prisma user/account
   callbacks: {
     // PUBLIC_INTERFACE
     async session({ session, token, user }) {
-      // Attach user id and role from JWT to the session object for frontend use
-      // Type assertion because NextAuth session.user often incomplete by default
       if (token?.sub) (session.user as AppSessionUser).id = token.sub;
       if (typeof token.role === "string") {
         (session.user as AppSessionUser).role = token.role;
@@ -174,19 +265,25 @@ export const authOptions: AuthOptions = {
     },
     // PUBLIC_INTERFACE
     async jwt({ token, user, account, profile }) {
-      // On login, attach extra user info/role to token (for role-based access)
-      // User available during login, not on subsequent calls
-      if (user && user.id) {
+      // On OAuth login: upsert user/account and get the authoritative user record
+      if (account && user && account.provider !== "credentials") {
+        const upserted = await upsertUserAndAccount({ user, account, profile });
+        token.id = upserted.id;
+        token.email = upserted.email;
+        token.role = upserted.role || "user";
+      } else if (user && user.id) {
         token.id = user.id;
         token.email = user.email;
-        // @ts-expect-error (role might not be present on all user objects)
+        // @ts-expect-error role might not be present on all user objects
         token.role = user.role || "user";
       }
       return token;
     },
     // PUBLIC_INTERFACE
     async signIn({ user, account, profile, email, credentials }) {
-      // Allow all sign-ins; add additional logic (domain allow, etc) here if needed.
+      // Hook for future custom signIn logic:
+      // - Optionally restrict logins, domain allow/block, etc.
+      // - All providers (OAuth/cred) now upsert user+account table on login via jwt callback above.
       return true;
     },
   },

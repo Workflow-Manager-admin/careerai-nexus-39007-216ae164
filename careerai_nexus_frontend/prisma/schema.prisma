@@ -18,7 +18,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   role          String   @default("user") // Support RBAC/min permissions
-  profile       Json?    // Extensible, onboarding / app profile data
+  profile       Json?    // Extensible, onboarding / app profile data (enrichable)
   // Audit and security
   lastLogin     DateTime?
   loginCount    Int      @default(0)
