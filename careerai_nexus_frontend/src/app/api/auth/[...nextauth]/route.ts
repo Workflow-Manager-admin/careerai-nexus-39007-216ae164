@@ -7,30 +7,95 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import type { JWT } from "next-auth/jwt";
 
-// Helper: Merge OAuth/Credentials user profile to ensure upsert/linked info
+/**
+ * Upsert (insert/update) User and Account records robustly for ANY provider on each login.
+ * Ensures User and Account are always in sync (flexible for multiple OAuth+credentials providers).
+ * Merges extensible profile fields and gracefully handles provider mapping for future expansion.
+ * Returns the authoritative/updated user row for JWT/session construction.
+ *
+ * Supports arbitrary OAuth providers, merges any incoming profile fields (name, email, avatar, bio, etc),
+ * and can persist additional extensible data under 'profile' JSON.
+ */
 async function upsertUserAndAccount({ user, account, profile }) {
-  if (!account || !account.provider || !account.providerAccountId) return user;
+  if (!account?.provider || !account?.providerAccountId) return user;
 
-  // Find the user by providerAccountId or by email
-  let dbUser = await prisma.user.findUnique({
-    where: { email: user.email ?? undefined },
-    include: { accounts: true },
-  });
+  // Try find user by account
+  let dbUser =
+    (await prisma.user.findFirst({
+      where: {
+        accounts: {
+          some: {
+            provider: account.provider,
+            providerAccountId: account.providerAccountId,
+          },
+        },
+      },
+      include: { accounts: true },
+    })) ||
+    (user.email
+      ? await prisma.user.findUnique({
+          where: { email: user.email },
+          include: { accounts: true },
+        })
+      : null);
 
-  // Upsert User (create new for OAuth if needed, update profile on login)
-  // OAuth: always update minimal profile fields; allow hook for profile enrichment later
-  if (!dbUser && account.provider !== "credentials") {
+  // Enrich/normalize incoming profile info for extensibility
+  const extProfile = {
+    ...(typeof dbUser?.profile === "object" && dbUser?.profile ? dbUser?.profile : {}),
+    ...(profile && typeof profile === "object" ? profile : {}),
+  };
+  // Make extensible fields explicit (handle merges/wins)
+  const name =
+    user?.name ??
+    profile?.name ??
+    profile?.displayName ??
+    extProfile?.name ??
+    dbUser?.name ??
+    null;
+  const image =
+    user?.image ??
+    profile?.picture ??
+    profile?.image ??
+    extProfile?.avatar_url ??
+    extProfile?.image ??
+    dbUser?.image ??
+    null;
+  const email =
+    user?.email ??
+    profile?.email ??
+    dbUser?.email ??
+    null;
+
+  const avatar = image || profile?.avatar || extProfile?.avatar || dbUser?.image || null;
+  const bio =
+    profile?.bio ??
+    extProfile?.bio ??
+    undefined;
+
+  const enrichedProfile = {
+    ...extProfile,
+    ...(bio ? { bio } : {}),
+    ...(profile?.avatar ? { avatar: profile.avatar } : {}),
+    ...(profile?.avatar_url ? { avatar: profile.avatar_url } : {}),
+    ...(image ? { image } : {}),
+    ...(name ? { name } : {}),
+  };
+
+  if (!dbUser) {
+    // New user, create and link account
     dbUser = await prisma.user.create({
       data: {
-        email: user.email,
-        name: user.name ?? profile?.name ?? undefined,
-        image: user.image ?? profile?.picture ?? profile?.image ?? undefined,
+        email: email ?? undefined,
+        name,
+        image,
         provider: account.provider,
-        profile: profile ? profile : undefined,
+        profile: Object.keys(enrichedProfile).length ? enrichedProfile : undefined,
         emailVerified:
-          account.provider === "google" && profile?.email_verified
-            ? new Date()
-            : undefined,
+          (account.provider === "google" && (profile?.email_verified || profile?.verified)) ?
+            new Date() :
+            undefined,
+        lastLogin: new Date(),
+        loginCount: 1,
         accounts: {
           create: {
             provider: account.provider,
@@ -47,19 +112,18 @@ async function upsertUserAndAccount({ user, account, profile }) {
         },
       },
     });
-  } else if (dbUser) {
-    // Update profile fields/last login, upsert account if new provider, update tokens if needed
+  } else {
+    // Update minimal profile and upsert account (always on login!)
     await prisma.user.update({
       where: { id: dbUser.id },
       data: {
-        name: user.name ?? dbUser.name,
-        image: user.image ?? dbUser.image,
+        name,
+        image,
         provider: account.provider ?? dbUser.provider,
-        profile: profile
-          ? { ...dbUser.profile, ...profile }
-          : dbUser.profile,
+        profile: Object.keys(enrichedProfile).length ? enrichedProfile : dbUser.profile,
         lastLogin: new Date(),
         loginCount: { increment: 1 },
+        // always upsert provider/account
         accounts: {
           upsert: {
             where: {
@@ -94,18 +158,19 @@ async function upsertUserAndAccount({ user, account, profile }) {
       },
     });
   }
-  // Find (again) and return latest
+
+  // Find + return latest, full user
   const result = await prisma.user.findUnique({
-    where: { email: user.email ?? undefined },
+    where: { id: dbUser.id },
   });
   return (
     result || {
       id: user.id,
       email: user.email,
-      name: user.name,
-      image: user.image,
+      name: name ?? user.name,
+      image: image ?? user.image,
     }
-  ); // fallback for credentials only
+  );
 }
 
 // ------------------------------------------------

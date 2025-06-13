@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id            String   @id @default(cuid())
-  name          String?  // Name from Google or user profile
+  name          String?  // Name from Google or profile (mirrored in 'profile' for enrich/extensibility)
   email         String   @unique
   emailVerified DateTime?
   image         String?
@@ -18,7 +18,12 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   role          String   @default("user") // Support RBAC/min permissions
-  profile       Json?    // Extensible, onboarding / app profile data (enrichable)
+  /**
+   * Extensible, onboarding / app profile data (enrichable).
+   * Common fields include: { bio, avatar, location, headline, website, ... }
+   * All providers/contributions merged here on each login.
+   */
+  profile       Json?
   // Audit and security
   lastLogin     DateTime?
   loginCount    Int      @default(0)
