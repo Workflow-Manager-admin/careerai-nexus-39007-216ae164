@@ -1,33 +1,35 @@
 "use client";
-import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import React from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import React, { useEffect } from "react";
+import {
+  BarChart3,
+  BrainCircuit,
+  FileText,
+  PenSquare,
+  LogOut,
+} from "lucide-react";
+
 /**
- * Dashboard page for AIspire (CareerAI Nexus)
- * - Protected from unauthenticated access (via middleware)
- * - Cyber security theme: pitch black/cyan (dark), white/pink (light)
- * - Navigation to Resume, Cover Letter, Interview modules
- * - Placeholders for stats graphs and AI insights
+ * PUBLIC_INTERFACE
+ * Authenticated dashboard shell for CareerAI Nexus.
+ * - Cyber-security theme: pitch black/cyan (dark), white/pink (light)
+ * - Persistent navigation to Resume, Cover Letter, Interview modules
+ * - Placeholders for graphs/stats & AI insights
+ * - Protected: visible only to authenticated users (session + middleware enforced)
  */
-
-// Shadcn UI and Lucide can be swapped with actual icons/components later for richer visuals:
-import { BarChart3, BrainCircuit, FileText, PenSquare, LogOut } from "lucide-react";
-
-// PUBLIC_INTERFACE
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
 
-  // If token based, middleware already protects route; session normally available client-side
-  React.useEffect(() => {
-    if (session === null) {
-      // If user is not authenticated, redirect to sign-in
+  useEffect(() => {
+    if (status === "unauthenticated") {
       router.push("/signin");
     }
-  }, [session, router]);
+  }, [session, status, router]);
 
-  // Cyber theme color classes
+  // Theme classes
   const baseCard =
     "bg-white/80 dark:bg-[#0a0a0a]/90 border border-pink-200 dark:border-cyan-600";
   const navHighlight =
@@ -46,7 +48,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen w-full bg-white dark:bg-black transition-colors duration-300 flex flex-col">
-      <div
+      <header
         className="w-full shadow-md flex justify-between items-center px-6 py-5
                     bg-white/80 dark:bg-[#0a0a0a]/95 sticky top-0 z-10 border-b border-pink-100 dark:border-cyan-800"
       >
@@ -68,23 +70,36 @@ export default function DashboardPage() {
             <LogOut className="w-5 h-5 text-pink-600 dark:text-cyan-400" />
           </button>
         </div>
-      </div>
+      </header>
       <section className="flex flex-1 flex-col md:flex-row gap-6 p-6 max-w-6xl mx-auto w-full">
         {/* Sidebar Navigation */}
         <nav
           className={`flex md:flex-col gap-4 md:w-56 min-w-[140px]`}
           aria-label="Dashboard navigation"
         >
-          <Link href="/dashboard" className={`${navHighlight} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold`}>
+          <Link
+            href="/dashboard"
+            className={`${navHighlight} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold`}
+            aria-current="page"
+          >
             <BarChart3 className="w-5 h-5" /> Dashboard
           </Link>
-          <Link href="/resume" className={`${navOutline} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold hover:bg-pink-50 dark:hover:bg-[#222d]`}>
+          <Link
+            href="/resume"
+            className={`${navOutline} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold hover:bg-pink-50 dark:hover:bg-[#222d]`}
+          >
             <FileText className="w-5 h-5" /> Resume
           </Link>
-          <Link href="/cover-letter" className={`${navOutline} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold hover:bg-pink-50 dark:hover:bg-[#222d]`}>
+          <Link
+            href="/cover-letter"
+            className={`${navOutline} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold hover:bg-pink-50 dark:hover:bg-[#222d]`}
+          >
             <PenSquare className="w-5 h-5" /> Cover Letter
           </Link>
-          <Link href="/interview" className={`${navOutline} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold hover:bg-pink-50 dark:hover:bg-[#222d]`}>
+          <Link
+            href="/interview"
+            className={`${navOutline} rounded-lg py-3 flex items-center gap-2 px-5 font-semibold hover:bg-pink-50 dark:hover:bg-[#222d]`}
+          >
             <BrainCircuit className="w-5 h-5" /> Interview Prep
           </Link>
         </nav>
@@ -94,14 +109,13 @@ export default function DashboardPage() {
           <section className={`${baseCard} rounded-2xl shadow-lg p-6`}>
             <h2 className={sectionTitle}>Your Progress</h2>
             <div className="flex flex-col md:flex-row gap-6">
-              {/* Placeholder for a chart */}
+              {/* Graph placeholder */}
               <div className="rounded-xl flex-1 min-h-[180px] bg-pink-50/70 dark:bg-cyan-950/40 flex items-center justify-center border border-pink-100 dark:border-cyan-700">
-                {/* Example Graph Placeholder */}
                 <span className="text-pink-900 dark:text-cyan-200 text-lg font-semibold opacity-50">
                   [Future: Chart of weekly interview performance, resume edits, etc.]
                 </span>
               </div>
-              {/* Key stats */}
+              {/* Key stats placeholders */}
               <div className="flex flex-col gap-4 w-64 min-w-[180px]">
                 <div className="rounded-md bg-pink-100 dark:bg-cyan-900/80 text-center p-4 border border-pink-200 dark:border-cyan-800">
                   <div className="text-2xl font-bold text-pink-700 dark:text-cyan-300">
@@ -124,7 +138,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </section>
-          {/* Weekly AI insights */}
+          {/* Weekly AI Insights Placeholder */}
           <section className={`${baseCard} rounded-2xl shadow-lg p-6`}>
             <h2 className={sectionTitle}>Weekly AI Insights</h2>
             <div className="flex items-center gap-4">
@@ -134,7 +148,7 @@ export default function DashboardPage() {
               </span>
             </div>
           </section>
-          {/* Feedback Form navigation */}
+          {/* Feedback Form navigation (optional per spec; main modules visible above) */}
           <div className="mt-4 w-full text-right">
             <Link
               href="/feedback"
