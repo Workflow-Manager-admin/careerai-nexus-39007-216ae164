@@ -1,10 +1,11 @@
-import NextAuth, { AuthOptions, SessionStrategy } from "next-auth";
+import NextAuth, { AuthOptions, SessionStrategy, User as NextAuthUser, Session } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { compare, hash } from "bcryptjs";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import type { JWT } from "next-auth/jwt";
 
 // ------------------------------------------------
 // ENV/Secret references (for secure, production setup)
@@ -22,6 +23,19 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !NEXTAUTH_SECRET) {
     "Missing required environment variables (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, NEXTAUTH_SECRET)"
   );
 }
+
+// ------------------------------------------------
+// Types for callback augmentation
+// ------------------------------------------------
+type AppUser = {
+  id: string;
+  email: string | null;
+  name?: string | null;
+  image?: string | null;
+  role?: string | null;
+};
+
+type AppSessionUser = Session["user"] & { id: string; role?: string | null };
 
 // ------------------------------------------------
 // NextAuth.js configuration for CareerAI Nexus custom auth
@@ -46,14 +60,20 @@ export const authOptions: AuthOptions = {
         register: { label: "Register", type: "text" }, // Hidden param for registration
       },
       // PUBLIC_INTERFACE
-      async authorize(credentials, req) {
+      async authorize(credentials: Record<string, unknown> | undefined, req) {
         // Validate & parse credentials
         const credsSchema = z.object({
           email: z.string().email(),
           password: z.string().min(6, "Password must be at least 6 characters"),
           register: z.string().optional(),
         });
-        const { email, password, register } = credsSchema.parse(credentials);
+        let parsed;
+        try {
+          parsed = credsSchema.parse(credentials);
+        } catch (err: any) {
+          throw new Error("Invalid credentials format");
+        }
+        const { email, password, register } = parsed;
 
         // Handle Sign-up
         if (register === "true") {
@@ -73,7 +93,8 @@ export const authOptions: AuthOptions = {
             email: user.email,
             name: user.name,
             image: user.image,
-          };
+            role: user.role,
+          } as AppUser;
         }
         // Handle Sign-in
         const user = await prisma.user.findUnique({ where: { email } });
@@ -97,7 +118,8 @@ export const authOptions: AuthOptions = {
           email: user.email,
           name: user.name,
           image: user.image,
-        };
+          role: user.role,
+        } as AppUser;
       },
     }),
   ],
@@ -143,23 +165,28 @@ export const authOptions: AuthOptions = {
     // PUBLIC_INTERFACE
     async session({ session, token, user }) {
       // Attach user id and role from JWT to the session object for frontend use
-      if (token?.sub) session.user.id = token.sub;
-      if (token?.role) session.user.role = token.role;
+      // Type assertion because NextAuth session.user often incomplete by default
+      if (token?.sub) (session.user as AppSessionUser).id = token.sub;
+      if (typeof token.role === "string") {
+        (session.user as AppSessionUser).role = token.role;
+      }
       return session;
     },
     // PUBLIC_INTERFACE
     async jwt({ token, user, account, profile }) {
       // On login, attach extra user info/role to token (for role-based access)
-      if (user) {
+      // User available during login, not on subsequent calls
+      if (user && user.id) {
         token.id = user.id;
         token.email = user.email;
+        // @ts-expect-error (role might not be present on all user objects)
         token.role = user.role || "user";
       }
       return token;
     },
     // PUBLIC_INTERFACE
     async signIn({ user, account, profile, email, credentials }) {
-      // If you want domain allow/block or post sign-in logic, do here. For now, allow all verified users.
+      // Allow all sign-ins; add additional logic (domain allow, etc) here if needed.
       return true;
     },
   },
