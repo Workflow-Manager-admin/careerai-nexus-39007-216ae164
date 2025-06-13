@@ -50,6 +50,7 @@ const themeColors = {
     grid: "rgba(30,246,226,0.13)",
     text: "#E0FCFF",
     secondary: "#0a0a0a",
+    pink: "#E91E63",
   },
   light: {
     primary: "#ffffff",
@@ -58,30 +59,34 @@ const themeColors = {
     grid: "rgba(226,31,112,0.13)",
     text: "#222222",
     secondary: "#f7f8fa",
+    cyan: "#00BCD4",
   },
 };
 
 // PUBLIC_INTERFACE
-/** Bar chart: Weekly User Activity */
-export function WeeklyActivityChart() {
+/** Bar chart: Weekly User Activity (uses dynamic labels/data if provided) */
+export function WeeklyActivityChart({ inputLabels, inputData, loading }) {
   const mode = useChartTheme();
   const colors = themeColors[mode];
 
-  // Mock data
+  // Fall back if not enough data or loading
+  const fallbackLabels = [
+    "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+  ];
+  const fallbackData = [0, 0, 0, 0, 0, 0, 0];
+
+  const displayedLabels = inputLabels?.length ? inputLabels : fallbackLabels;
+  const displayedData =
+    inputData && inputData.length === displayedLabels.length
+      ? inputData
+      : fallbackData;
+
   const data = {
-    labels: [
-      "Mon",
-      "Tue",
-      "Wed",
-      "Thu",
-      "Fri",
-      "Sat",
-      "Sun"
-    ],
+    labels: displayedLabels,
     datasets: [
       {
         label: "Active Sessions",
-        data: [8, 17, 16, 20, 11, 7, 13],
+        data: displayedData,
         backgroundColor: mode === "dark" ? colors.cyan : colors.pink,
         borderRadius: 6,
         barThickness: 28,
@@ -128,32 +133,36 @@ export function WeeklyActivityChart() {
   };
 
   return (
-    <div className="w-full h-64">
+    <div className="w-full h-64 relative">
+      {loading && <div className="text-center pt-24 text-sm text-gray-500 opacity-80">Loading...</div>}
       <Bar data={data} options={options} />
     </div>
   );
 }
 
 // PUBLIC_INTERFACE
-/** Line chart: Interview Performance Trend */
-export function InterviewPerformanceChart() {
+/** Line chart: Interview Performance Trend (uses dynamic data if provided) */
+export function InterviewPerformanceChart({ inputLabels, inputScores, loading }) {
   const mode = useChartTheme();
   const colors = themeColors[mode];
 
-  // Mock data
+  const defaultLabels = [
+    "Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"
+  ];
+  const defaultData = [0, 0, 0, 0, 0, 0];
+
+  const labels = inputLabels?.length ? inputLabels : defaultLabels;
+  const scores =
+    inputScores && inputScores.length === labels.length
+      ? inputScores
+      : defaultData;
+
   const data = {
-    labels: [
-      "Week 1",
-      "Week 2",
-      "Week 3",
-      "Week 4",
-      "Week 5",
-      "Week 6",
-    ],
+    labels: labels,
     datasets: [
       {
         label: "Score (%)",
-        data: [60, 73, 68, 80, 75, 89],
+        data: scores,
         borderColor: mode === "dark" ? colors.cyan : colors.pink,
         backgroundColor:
           mode === "dark"
@@ -184,32 +193,39 @@ export function InterviewPerformanceChart() {
       y: {
         ticks: { color: colors.text, font: { size: 12 } },
         grid: { color: colors.grid, borderDash: [5, 6] },
-        min: 50,
+        min: 0,
         max: 100,
       },
     },
   };
 
   return (
-    <div className="w-full h-64">
+    <div className="w-full h-64 relative">
+      {loading && (
+        <div className="text-center pt-24 text-sm text-gray-500 opacity-80">
+          Loading...
+        </div>
+      )}
       <Line data={data} options={options} />
     </div>
   );
 }
 
 // PUBLIC_INTERFACE
-/** Doughnut chart: Resume/Cover Submissions */
-export function SubmissionBreakdownChart() {
+/** Doughnut chart: Resume/Cover Submissions (uses dynamic values if provided) */
+export function SubmissionBreakdownChart({ resumeCount, coverCount, loading }) {
   const mode = useChartTheme();
   const colors = themeColors[mode];
 
-  // Mock data
+  const resCount = resumeCount !== undefined ? resumeCount : 0;
+  const covCount = coverCount !== undefined ? coverCount : 0;
+
   const data = {
     labels: ["Resumes", "Cover Letters"],
     datasets: [
       {
         label: "Submissions",
-        data: [12, 7],
+        data: [resCount, covCount],
         backgroundColor: [
           mode === "dark" ? colors.cyan : colors.pink,
           mode === "dark"
@@ -243,25 +259,38 @@ export function SubmissionBreakdownChart() {
   };
 
   return (
-    <div className="w-full h-48 flex flex-col items-center justify-center">
+    <div className="w-full h-48 flex flex-col items-center justify-center relative">
+      {loading && (
+        <div className="absolute left-0 top-0 right-0 bottom-0 flex items-center justify-center text-gray-500 opacity-80">
+          Loading...
+        </div>
+      )}
       <Doughnut data={data} options={options} />
     </div>
   );
 }
 
 // PUBLIC_INTERFACE
-/** Line chart: AI Insights/Trends (mock example) */
-export function AiInsightsChart() {
+/** Line chart: AI Insights/Trends (uses dynamic values if provided) */
+export function AiInsightsChart({ insightLabels, insightScores, loading }) {
   const mode = useChartTheme();
   const colors = themeColors[mode];
 
-  // Mock trend data: e.g., average recommendation score per week
+  const baseLabels = ["Wk 1", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6"];
+  const baseData = [0, 0, 0, 0, 0, 0];
+
+  const labels = insightLabels?.length ? insightLabels : baseLabels;
+  const scores =
+    insightScores && insightScores.length === labels.length
+      ? insightScores
+      : baseData;
+
   const data = {
-    labels: ["Wk 1", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6"],
+    labels: labels,
     datasets: [
       {
         label: "Insight Score",
-        data: [6.5, 6.2, 7.1, 7.6, 8.6, 8.3],
+        data: scores,
         borderColor: mode === "dark" ? colors.cyan : colors.pink,
         backgroundColor:
           mode === "dark"
@@ -292,14 +321,19 @@ export function AiInsightsChart() {
       y: {
         ticks: { color: colors.text, font: { size: 12 } },
         grid: { color: colors.grid, borderDash: [5, 6] },
-        min: 4,
+        min: 0,
         max: 10,
       },
     },
   };
 
   return (
-    <div className="w-full h-56">
+    <div className="w-full h-56 relative">
+      {loading && (
+        <div className="text-center pt-20 text-sm text-gray-500 opacity-80">
+          Loading...
+        </div>
+      )}
       <Line data={data} options={options} />
     </div>
   );
