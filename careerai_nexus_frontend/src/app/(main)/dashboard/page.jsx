@@ -10,6 +10,12 @@ import {
   PenSquare,
   LogOut,
 } from "lucide-react";
+import {
+  WeeklyActivityChart,
+  InterviewPerformanceChart,
+  SubmissionBreakdownChart,
+  AiInsightsChart,
+} from "@/components/StatsCharts";
 
 /**
  * PUBLIC_INTERFACE
@@ -108,44 +114,55 @@ export default function DashboardPage() {
           {/* Performance Stats/Graphs */}
           <section className={`${baseCard} rounded-2xl shadow-lg p-6`}>
             <h2 className={sectionTitle}>Your Progress</h2>
-            <div className="flex flex-col md:flex-row gap-6">
-              {/* Graph placeholder */}
-              <div className="rounded-xl flex-1 min-h-[180px] bg-pink-50/70 dark:bg-cyan-950/40 flex items-center justify-center border border-pink-100 dark:border-cyan-700">
-                <span className="text-pink-900 dark:text-cyan-200 text-lg font-semibold opacity-50">
-                  [Future: Chart of weekly interview performance, resume edits, etc.]
-                </span>
+            <div className="flex flex-col md:flex-row gap-6 w-full">
+              {/* Left: Graphs column */}
+              <div className="flex-1 flex flex-col gap-6 min-w-0">
+                <div className="rounded-xl p-4 bg-pink-50/60 dark:bg-cyan-950/40 border border-pink-100 dark:border-cyan-700 mb-2">
+                  <span className="font-bold text-black dark:text-cyan-200 text-base">Weekly Activity</span>
+                  <WeeklyActivityChart />
+                </div>
+                <div className="rounded-xl p-4 bg-pink-50/60 dark:bg-cyan-950/40 border border-pink-100 dark:border-cyan-700">
+                  <span className="font-bold text-black dark:text-cyan-200 text-base">Interview Performance</span>
+                  <InterviewPerformanceChart />
+                </div>
               </div>
-              {/* Key stats placeholders */}
-              <div className="flex flex-col gap-4 w-64 min-w-[180px]">
-                <div className="rounded-md bg-pink-100 dark:bg-cyan-900/80 text-center p-4 border border-pink-200 dark:border-cyan-800">
-                  <div className="text-2xl font-bold text-pink-700 dark:text-cyan-300">
-                    0
+              {/* Key stats + resume/cover chart */}
+              <div className="flex flex-col gap-5 w-72 min-w-[200px] shrink-0">
+                <div className="rounded-lg bg-pink-100/80 dark:bg-cyan-900/90 flex flex-col items-center p-3 border border-pink-200 dark:border-cyan-800">
+                  <div className="text-xs uppercase font-semibold tracking-wide text-pink-700 dark:text-cyan-400 pb-2">Submissions</div>
+                  <SubmissionBreakdownChart />
+                  <div className="flex mt-2 gap-3 justify-center w-full text-center text-xs font-medium">
+                    <span className="flex-auto text-pink-700 dark:text-cyan-300">Resumes: 12</span>
+                    <span className="flex-auto text-pink-700 dark:text-cyan-300">Covers: 7</span>
                   </div>
-                  <div className="text-xs uppercase font-semibold text-pink-700 dark:text-cyan-300">Interview sessions</div>
                 </div>
-                <div className="rounded-md bg-pink-100 dark:bg-cyan-900/80 text-center p-4 border border-pink-200 dark:border-cyan-800">
-                  <div className="text-2xl font-bold text-pink-700 dark:text-cyan-300">
-                    0
-                  </div>
-                  <div className="text-xs uppercase font-semibold text-pink-700 dark:text-cyan-300">Resumes built</div>
+                <div className="rounded-md bg-pink-100 dark:bg-cyan-900/80 text-center p-3 border border-pink-200 dark:border-cyan-800">
+                  <div className="text-xl font-bold text-pink-700 dark:text-cyan-300">6</div>
+                  <div className="text-xs uppercase font-semibold text-pink-700 dark:text-cyan-300">Weeks Tracked</div>
                 </div>
-                <div className="rounded-md bg-pink-100 dark:bg-cyan-900/80 text-center p-4 border border-pink-200 dark:border-cyan-800">
-                  <div className="text-2xl font-bold text-pink-700 dark:text-cyan-300">
-                    0
-                  </div>
-                  <div className="text-xs uppercase font-semibold text-pink-700 dark:text-cyan-300">Cover letters</div>
+                <div className="rounded-md bg-pink-100 dark:bg-cyan-900/80 text-center p-3 border border-pink-200 dark:border-cyan-800">
+                  <div className="text-xl font-bold text-pink-700 dark:text-cyan-300">Interview High: 89%</div>
+                  <div className="text-xs uppercase font-semibold text-pink-700 dark:text-cyan-300">Best Score</div>
                 </div>
               </div>
             </div>
           </section>
-          {/* Weekly AI Insights Placeholder */}
+          {/* Weekly AI Insights */}
           <section className={`${baseCard} rounded-2xl shadow-lg p-6`}>
             <h2 className={sectionTitle}>Weekly AI Insights</h2>
-            <div className="flex items-center gap-4">
-              <BrainCircuit className="w-6 h-6 text-pink-500 dark:text-cyan-400" aria-hidden />
-              <span className="italic text-black/90 dark:text-cyan-200 opacity-70">
-                [Future: AI-powered tips for your career each week, tailored for you!]
-              </span>
+            <div className="flex flex-col md:flex-row gap-6 items-start">
+              <div className="flex-1 flex flex-col min-w-0">
+                <AiInsightsChart />
+              </div>
+              <div className="flex flex-col gap-2 shrink-0 w-64">
+                <div className="flex items-center gap-3">
+                  <BrainCircuit className="w-6 h-6 text-pink-500 dark:text-cyan-400" aria-hidden />
+                  <span className="italic text-black/90 dark:text-cyan-200 opacity-80">
+                    Sample AI-powered weekly insight: <br />
+                    <span className="font-semibold">“Your interview performance is trending upward. Keep practicing scenario-based questions.”</span>
+                  </span>
+                </div>
+              </div>
             </div>
           </section>
           {/* Feedback Form navigation (optional per spec; main modules visible above) */}
